@@ -255,7 +255,7 @@ int main(int argc, const char * argv[])
                     }
                 }
 
-				Params = getFromPrevious3(previousParticles[chosen], maxWeights[chosen]);
+				Params = getFromPrevious(previousParticles[chosen], maxWeights[chosen]);
 				Params.changeParams();
 			}
 			

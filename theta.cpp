@@ -31,12 +31,6 @@ theta::theta(double E, double Ss_l, double Ss_h, double As, double J, int m)
     model = m;
 }
 
-void update_val(double& val, double max)
-{
-	val += normal(0.0,P.sigma);
-	if(val > max) val = max;
-}
-
 void update_val(double& val, double max, double min)
 {
     val += normal(0.0,P.sigma);
@@ -116,41 +110,7 @@ theta getRandomCombo()
 	return output;
 }
 
-theta getFromPrevious(const std::vector<double>& weights, const std::vector<particle>& particles)
-{
-	const double r = uniform();
-
-	int min = 0;
-	int max = (int)weights.size()- 1;
-	int med = (int)((max+min)*0.5);
-
-	while((max-min) > 1)
-	{
-		if(weights[med] >= r) max = med;
-		else min = med;
-
-		med = (int)((max+min)*0.5);
-	}
-
-	return particles[med].T;
-}
-
-theta getFromPrevious2(const std::vector<particle>& particles)
-{
-	for(int i = 0; i < 1e6; ++i)    {
-		int index = random_number((int)particles.size());
-		if(uniform() < particles[index].weight)
-		{
-			return particles[index].T;
-		}
-	}
-	
-	//this code should never be reached, but just in case:
-	int index = random_number((int)particles.size());
-	return particles[index].T;
-}
-
-theta getFromPrevious3(const std::vector<particle>& particles, double maxWeight)
+theta getFromPrevious(const std::vector<particle>& particles, double maxWeight)
 {
     for(int i = 0; i < 1e6; ++i)    {
         int index = random_number((int)particles.size());

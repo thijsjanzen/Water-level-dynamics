@@ -222,9 +222,7 @@ void readRealDataPoint(std::vector<spec_point>& R);
 void setupVectors(std::vector<spec_point>& real_data, std::vector<double>& real);
 
 theta getRandomCombo();
-theta getFromPrevious(const std::vector<double>& weights, const std::vector<particle>& particles);
-theta getFromPrevious2(const std::vector<particle>& particles);
-theta getFromPrevious3(const std::vector<particle>& particles, double maxWeight);
+theta getFromPrevious(const std::vector<particle>& particles, double maxWeight);
 
 
 
