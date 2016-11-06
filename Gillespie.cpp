@@ -167,7 +167,7 @@ int main(int argc, const char * argv[])
 
 	setupVectors(real_data,real); //this function reads either lampro_alt if recheck == 1, or lampro4.txt if else.
 	
-	for(; t < 20; ++t)
+	for(; t < 10; ++t) //smaller than 10, to not let travis run until eternity
 	{	
 		// std::vector<particle> previousParticles = particles;
 		P.t = (int)t;
