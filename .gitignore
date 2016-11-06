@@ -1,2 +1,16 @@
 *.pro.user
 *.pro.user.*
+Makefile
+Makefile.*
+Water-level-dynamics
+release/
+seed.txt
+summaryStatistics*.txt
+water_t*.txt
+particles_t=*.txt
+lineages_t=1*.txt
+lampro_alt.txt
+config_generated.ini
+NEWICK_1*.tre
+acceptFile.txt
+acceptRate.txt
