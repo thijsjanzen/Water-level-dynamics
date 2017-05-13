@@ -222,7 +222,7 @@ int main(int argc, const char * argv[])
 
 
 
-	for(; t < 20; ++t)
+	for(; t < 3; ++t)
 	{	
 		P.t = (int)t;
 
