@@ -25,13 +25,11 @@ unix:!macx{
 }
 
 HEADERS += \
-    Beta.h \
     GetParams.h \
     Gillespie.h \
     randomc.h
 
 SOURCES += \
-    Beta.cpp \
     GetParams.cpp \
     Gillespie.cpp \
     mersenne.cpp \
