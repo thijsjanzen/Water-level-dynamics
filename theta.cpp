@@ -25,10 +25,17 @@ theta::theta()
 theta::theta(double E, double Ss_l, double Ss_h, double As, double J, int m)
 {
 	extinct = E;
-	sym_spec_low = Ss_l; sym_spec_high = Ss_h;
+	sym_spec_low = Ss_l;
+    sym_spec_high = Ss_h;
 	allo_spec = As;
 	jiggle = J;
     model = m;
+}
+
+void update_val(double& val, double max)
+{
+	val += normal(0.0, P.sigma);
+	if(val > max) val = max;
 }
 
 void update_val(double& val, double max, double min)
@@ -61,7 +68,7 @@ void theta::changeParams() {
         }
     }
 
-   /* int r = random_number(4);
+    int r = random_number(4);
     if(r == 0) {
         model++;
     }
@@ -70,15 +77,16 @@ void theta::changeParams() {
     }
     if(model > 2) model -= 3;
     if(model < 0) model += 3;
-  */
 
-    double r = uniform();
+
+   /* double r = uniform();
     if(r < 0.05) {
         model++;
     }
     if(r > 0.95) {
         model--;
-    }
+    }*/
+
     if(model > 2) model -= 3;
     if(model < 0) model += 3;
 }
@@ -96,21 +104,79 @@ void theta::assignParams()
 }
 
 
-theta getRandomCombo()
+void theta::getRandomCombo()
 {
-	theta output;
+	extinct = -3 + 5 * uniform();
+    sym_spec_low = -3 + 5 * uniform();
+	sym_spec_high = -3 + 5 * uniform();
+	allo_spec = -3 + 5 * uniform();
+	jiggle = -3 + 3 * uniform();
+    model = random_number(3);
 
-	output.extinct = -3 + 5 * uniform();
-    output.sym_spec_low = -3 + 5 * uniform();
-	output.sym_spec_high = -3 + 5 * uniform();
-	output.allo_spec = -3 + 5 * uniform();
-	output.jiggle = -3 + 5 * uniform();
-    output.model = random_number(3);
-
-	return output;
+	return;
 }
 
-theta getFromPrevious(const std::vector<particle>& particles, double maxWeight)
+bool theta::withinPrior()
+{
+    if(extinct < -3) return false;
+    if(extinct >  2) return false;
+
+    if(sym_spec_low < -3) return false;
+    if(sym_spec_low >  2) return false;
+
+    if(sym_spec_high < -3) return false;
+    if(sym_spec_high >  2) return false;
+
+    if(allo_spec < -3) return false;
+    if(allo_spec >  2) return false;
+
+    if(jiggle < -3) return false;
+    if(jiggle >  0) return false;
+
+    if(model < 0) return false;
+    if(model > 2) return false;
+
+    return true;
+}
+
+
+
+
+theta getFromPrevious(const std::vector<double>& weights, const std::vector<particle>& particles)
+{
+	const double r = uniform();
+
+	int min = 0;
+	int max = (int)weights.size()- 1;
+	int med = (int)((max+min)*0.5);
+
+	while((max-min) > 1)
+	{
+		if(weights[med] >= r) max = med;
+		else min = med;
+
+		med = (int)((max+min)*0.5);
+	}
+
+	return particles[med].T;
+}
+
+theta getFromPrevious2(const std::vector<particle>& particles)
+{
+	for(int i = 0; i < 1e6; ++i)    {
+		int index = random_number((int)particles.size());
+		if(uniform() < particles[index].weight)
+		{
+			return particles[index].T;
+		}
+	}
+	
+	//this code should never be reached, but just in case:
+	int index = random_number((int)particles.size());
+	return particles[index].T;
+}
+
+theta getFromPrevious3(const std::vector<particle>& particles, double maxWeight)
 {
     for(int i = 0; i < 1e6; ++i)    {
         int index = random_number((int)particles.size());
@@ -191,6 +257,8 @@ particle::particle()
 	T = theta();
 	lins = 0;
 	specT = 0;
+    numberAlloEvents = 0;
+    numberExtinctions = 0;
 }
 
 particle::particle(const particle& other)

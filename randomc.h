@@ -169,7 +169,9 @@ public:
 	   RandomInit(seed); LastInterval = 0; normal_x2_valid = 0;}
 	
    void RandomInit(int seed);          // Re-seed
+   void RandomInitByArray(int const seeds[], int NumSeeds); // Seed by more than 32 bits
    int IRandom (int min, int max);     // Output random integer
+   int IRandomX(int min, int max);     // Output random integer, exact
    double Random();                    // Output random float
    uint32_t BRandom();                 // Output random bits
 	
@@ -190,8 +192,9 @@ void set_seed(int seed);
 double uniform();
 int random_number(int n);
 double normal(double m, double s);
+double trunc_normal(double m, double s, double t);
 double Expon(double lambda);
-
+double log_normal(double m, double s);
 
 
 

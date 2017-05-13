@@ -26,8 +26,6 @@ struct spec_point
 	double ID;
 	double time;
 
-
-
 	bool operator<(const spec_point& other) const { return time < other.time; }
 
 	bool operator==(const spec_point& other) const
@@ -124,6 +122,9 @@ struct theta
     void changeParams();
 	void assignParams();
 
+    bool withinPrior();
+    void getRandomCombo();
+
 };
 
 struct particle
@@ -219,10 +220,11 @@ double calculateWeight(int i, const std::vector<particle>& v, const theta& T);
 long double calcK(double theta_i, double theta_j, double sigma);
 void convertPointToInt(const std::vector<point>& p, std::vector<double>& R);
 void readRealDataPoint(std::vector<spec_point>& R);
-void setupVectors(std::vector<spec_point>& real_data, std::vector<double>& real);
+void setupVectors(std::vector<spec_point>& real_data);
 
-theta getRandomCombo();
-theta getFromPrevious(const std::vector<particle>& particles, double maxWeight);
+theta getFromPrevious(const std::vector<double>& weights, const std::vector<particle>& particles);
+theta getFromPrevious2(const std::vector<particle>& particles);
+theta getFromPrevious3(const std::vector<particle>& particles, double maxWeight);
 
 
 

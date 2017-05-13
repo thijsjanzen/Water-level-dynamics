@@ -3,7 +3,7 @@
 
 #include "GetParams.h"
 #include "Gillespie.h"
-#include "Beta.h"
+//#include "Beta.h"
 #include <math.h> 
 #include <random>
 
@@ -43,8 +43,8 @@ int main(int argc, const char * argv[])
     int numberAccepted = 0;
     int numberProposed = 0;
 
-	
 	P.emp_values.resize(4,0);
+
 
     // read old acceptance rate
     std::ifstream acceptFile("acceptFile.txt");
@@ -107,32 +107,43 @@ int main(int argc, const char * argv[])
 		if (!file_exists(f_name_alt)) //if lampro_alt already exists, a previous run has generated data already!
         {
             std::cout << "Generating data to fit to\n";
-			int tries = 1;
 			bool data_found = false;
-			while(tries < 1e6 && !data_found)
+			while(!data_found)
 			{
-				theta Params = getRandomCombo();
+                theta Params;
+                Params.getRandomCombo();
+                Params.model = P.waterModel;
 				Params.assignParams();
-				tries++;
-			
-				for(int j = 0; j < 100;++j)
-				{
-					int lins;
-					double beta = 2;
-					int t = 0;
+                P.maxT = log_normal(1.353, 0.13); //this is the prior distribution from Meyer 2016.
 
-					double meanSpecTime = 0;
-					std::vector<spec_point> lineages;
+                bool verify = false;
 
-					std::vector<double> F = doRun(real_data, lins,t,j,W,beta,meanSpecTime,lineages, P.waterModel);
+                if(verify) {
+                    Params.model = 2;
+                    Params.allo_spec = 1;
+                    Params.sym_spec_high = -2;
+                    Params.sym_spec_low = -5;
+                    Params.extinct = -5;
+                    Params.jiggle = -1;
+                    Params.assignParams();
+                }
 
-				  if(F[1] < 1e6 && F[2] < 1e6 && lins > 10) 
-				  {
+
+                int lins;
+                double beta = 2;
+                int t = 0;
+
+                double meanSpecTime = 0;
+                std::vector<spec_point> lineages;
+
+                std::vector<double> F = doRun(real_data, lins,t, 0 , W, beta, meanSpecTime, lineages, P.waterModel);
+
+                if(lins == P.emp_values[3]) //conditional on empirical data
+                {
 					std::cout << "we have found a match! starting to generate required files\n";
 					makeFiles(lineages);
 					F[0] = 0.0; //nLTT always check against 0
 					P.emp_values = F;
-					
 
 					std::cout << "Fitting to a tree with\n";
 					std::cout << "nLTT of  " << F[0] << "\n";
@@ -148,30 +159,72 @@ int main(int argc, const char * argv[])
 					}
 					statisticsFile << P.maxT << "\n";
 					statisticsFile.close();
+
+                    std::ofstream paramsFile("params_used_to_generate_with.txt");
+                    paramsFile << Params << "\n";
+                    paramsFile.close();
+
 					data_found = true;
 					break;
-				  }
-
-				}
-			}
-        } else {
-            std::ifstream alternativeSummary("summaryStatistics2.txt");
-            for(std::size_t index = 0; index < P.emp_values.size(); ++index)
-            {
-                alternativeSummary >> P.emp_values[index];
+                }
             }
-            alternativeSummary >> P.maxT;
-            alternativeSummary.close();
         }
 	}
 
-	setupVectors(real_data,real); //this function reads either lampro_alt if recheck == 1, or lampro4.txt if else.
-	
-	for(; t < 10; ++t) //smaller than 10, to not let travis run until eternity
+    std::string altern_file_name = "summaryStatistics2.txt";
+    if(file_exists(altern_file_name)) {
+        std::ifstream alternativeSummary(altern_file_name);
+        for(std::size_t index = 0; index < P.emp_values.size(); ++index)    {
+            alternativeSummary >> P.emp_values[index];
+        }
+        alternativeSummary >> P.maxT;
+        alternativeSummary.close();
+    }
+
+	setupVectors(real_data); //this function reads either lampro_alt if recheck == 1, or lampro4.txt if else.
+
+    if(P.generateData == 42) {
+        //GENERATE FROM PRIOR
+        std::ofstream outFile("fromPrior.txt");
+        for(int x = 0; x < 10000; ) {
+            theta Params;
+            Params.getRandomCombo();
+            Params.model = P.waterModel;
+            Params.assignParams();
+            P.maxT = log_normal(1.353, 0.13); //this is the prior distribution from Meyer 2016.
+
+            int lins;
+            double beta = 2;
+            int t = 1;
+
+            double meanSpecTime = 0;
+            std::vector<spec_point> lineages;
+
+            std::vector<double> F = doRun(real_data, lins,t, 0 , W, beta, meanSpecTime, lineages, P.waterModel);
+
+            if(lineages.size() > 0) {
+                F[0] = calcNLTT(real_data, lineages);
+                //outFile << F[0] << "\t" << F[1] << "\t" << F[2] << "\t" << F[3] << "\t" << F[4] << "\n";
+                for(int i = 0; i < F.size(); ++i) {
+                    outFile << F[i] << "\t";
+                }
+                outFile << "\n";
+                x++;
+            }
+            if(x % 1000 == 0) {
+                std::cout << x << "\n";
+            }
+        }
+        outFile.close();
+        exit(0);
+    }
+
+
+
+
+	for(; t < 20; ++t)
 	{	
-		// std::vector<particle> previousParticles = particles;
 		P.t = (int)t;
-	//	if(P.t > 9) break;
 
 		if((int)particles.size() != 0 && (int)particles.size() != P.numberParticles) numberAccepted = (int)particles.size();
 		particles.clear();
@@ -180,31 +233,36 @@ int main(int argc, const char * argv[])
         std::vector< double > M(3,0); //holds the frequencies of each model.
         std::vector< double > maxWeights(3,-1);
 		
-		if(t!=0)
+		if(t != 0)
 		{
 			readParticles((int)(t-1),particles);
-			
-			if(particles.empty())
-			{
+            while((int)particles.size() < P.numberParticles-1) {
+                std::cout << "READ NOT ENOUGH PARTICLES, STEPPING BACK\n";
+                t--;
+                numberAccepted = (int)particles.size();
+                readParticles((int)(t-1),particles);
+            }
+
+			if(particles.empty())   {
 				std::ofstream partfile("PARTICLES EMPTY.txt");
 				partfile << "could not read particles file...";
 				partfile.close();
-				break;
+                return 0;
 			}
 
-            for(int i = 0; i < particles.size(); ++i) {
+            for(int i = 0; i < (int)particles.size(); ++i) {
                 int modelType = particles[i].T.model;
                 if(modelType >= 0 && modelType < (int)previousParticles.size()) {
                     previousParticles[modelType].push_back(particles[i]);
                 }
             }
 
-
             double sum = 0;
             for(int i = 0; i < 3; ++i) {
                 M[i] = (int)previousParticles[i].size();
                 sum += M[i];
             }
+
             for(int i = 0; i < 3; ++i) {
                 M[i] = M[i] / sum;
             }
@@ -220,16 +278,29 @@ int main(int argc, const char * argv[])
                     }
                     for(auto it = temp.begin(); it != temp.end(); ++it) {
                         (*it).weight = (*it).weight / sum;
-                        if(maxWeights[i] < (*it).weight) {
+                        if( (*it).weight > maxWeights[i]) {
                             maxWeights[i] = (*it).weight;
                         }
                     }
                     previousParticles[i] = temp;
                 }
             }
-
 		}
 
+        if(t > 0) {
+            int sum = (int)previousParticles[0].size() + (int)previousParticles[1].size() + (int)previousParticles[2].size();
+            if(sum < P.numberParticles-1) {
+                std::cout << "PREVIOUS ITERATION DID NOT GET 10K\n";
+                return 0;
+            }
+        }
+
+        for(int i = 0; i < 3; ++i) {
+            if((int)previousParticles[i].size() >= (P.numberParticles-2)) {
+                std::cout << "fixed for a model, done!\n";
+                return 0;
+            }
+        }
 
 
 
@@ -242,7 +313,7 @@ int main(int argc, const char * argv[])
 		{
 			theta Params;
 			if(t == 0) {
-				Params = getRandomCombo(); 
+				Params.getRandomCombo();
 			}   else    {
 
                 int chosen = 0;
@@ -255,52 +326,59 @@ int main(int argc, const char * argv[])
                     }
                 }
 
-				Params = getFromPrevious(previousParticles[chosen], maxWeights[chosen]);
+				Params = getFromPrevious3(previousParticles[chosen], maxWeights[chosen]);
 				Params.changeParams();
 			}
-			
-			Params.assignParams();
-			
-			int lins = -1;
-			double beta = 100;
-			double meanSpecTime = 0;
 
-			std::vector<spec_point> lineages;
+            if(P.generateData == 666) {
+                Params.model = P.waterModel;
+            }
 
-			//////////////////////////////////////////////////////////////////////
-			std::vector<double> F(4,1e6);
-			if(t != 0) F = doRun(real_data, lins,(int)t,numberProposed,W,beta,meanSpecTime,lineages, Params.model);
-			///////////////////////////////////////////////////////////////////////
+            if(Params.withinPrior()) {
+                Params.assignParams();
+                
+                int lins = -1;
+                double beta = 100;
+                double meanSpecTime = 0;
 
-			if(withinLimits(F,(int)t,lineages,real_data, Params.model) || t == 0)
-			{
-				particle add(Params,F,lins,meanSpecTime,P.numAllo,P.numExtinct);
+                std::vector<spec_point> lineages;
 
-                if(t == 0) {
-                    add.weight = 1.0;
-                }   else {
-					add.calculateWeight(M,previousParticles);
-				}
-				
-				out_particle << add << "\n"; out_particle.flush();
+                //////////////////////////////////////////////////////////////////////
+                std::vector<double> F(4, 1e6);
+                if(t != 0) F = doRun(real_data, lins,(int)t, numberProposed, W, beta,
+                                     meanSpecTime, lineages, Params.model);
+                ///////////////////////////////////////////////////////////////////////
 
-				numberAccepted++;
+                if(withinLimits(F,(int)t, lineages, real_data, Params.model) || t == 0)
+                {
+                    particle add(Params, F, lins, meanSpecTime, P.numAllo, P.numExtinct);
 
-				std::cout << "iteration " << t << "\t" << numberAccepted << " of " << P.numberParticles << " accepted\n";
-			}
+                    if(t == 0) {
+                        add.weight = 1.0;
+                    }   else {
+                        add.calculateWeight(M, previousParticles);
+                    }
+                    
+                    out_particle << add << "\n"; out_particle.flush();
 
-            if(numberProposed % 1000 == 0) {
-                // update acceptance rate and write to file in case another simulation will have to restart after this one
-                double acceptRate = 1.0 * numberAccepted/ numberProposed;
-                std::ofstream acceptFile("acceptFile.txt",std::ios::app);
-                acceptFile << t << "\t" << numberAccepted << "\t" << numberProposed << "\t" << acceptRate << "\n";
-                acceptFile.close();
-                if(1.0 * numberProposed / numberAccepted > 1e6 && numberProposed > 1e6) {
-                    // accept rate drops below 1 in a million
-                    std::ofstream stopFile("stopFile.txt");
-                    stopFile << "Acceptance rate below: " << numberAccepted  << " in " << numberProposed << "particles\n";
-                    stopFile.close();
-                    return 0;
+                    numberAccepted++;
+
+                    std::cout << "iteration " << t << "\t" << numberAccepted << " of " << P.numberParticles << " accepted\n";
+                }
+
+                if(numberProposed % 1000 == 0) {
+                    // update acceptance rate and write to file in case another simulation will have to restart after this one
+                    double acceptRate = 1.0 * numberAccepted/ numberProposed;
+                    std::ofstream acceptFile("acceptFile.txt",std::ios::app);
+                    acceptFile << t << "\t" << numberAccepted << "\t" << numberProposed << "\t" << acceptRate << "\n";
+                    acceptFile.close();
+                    if(1.0 * numberProposed / numberAccepted > 1e6 && numberProposed > 1e6) {
+                        // accept rate drops below 1 in a million
+                        std::ofstream stopFile("stopFile.txt");
+                        stopFile << "Acceptance rate below: " << numberAccepted  << " in " << numberProposed << "particles\n";
+                        stopFile.close();
+                        return 0;
+                    }
                 }
             }
 		}
@@ -328,18 +406,16 @@ double calcMean(const std::vector<T>& v) {
 }
 
 
-
-void jiggle(std::vector<species>& S)    {
-	std::vector<int> jiggled((int)S.size(),0);
-	for(int i = 0; i < (int)S.size(); ++i)
-	{
+//old version
+/*
+void jiggle( std::vector<species>& S)    {
+	std::vector<int> jiggled((int)S.size(), 0);
+	for(int i = 0; i < (int)S.size(); ++i)  {
 		double lowerLim = 0.0;
 		double upperLim = P.maxT;
 		double bTime = S[i].birth_time;
-		if(bTime > 0 && jiggled[i] == 0)
-		{
-			for(int j = 0; j < (int)S.size(); ++j)
-			{
+		if(bTime > 0 && jiggled[i] == 0) {
+			for(int j = 0; j < (int)S.size(); ++j) {
 				if(S[j].ID == S[i].parent) {
 					lowerLim = S[j].birth_time;
 				}
@@ -405,10 +481,112 @@ void jiggle(std::vector<species>& S)    {
 	return;
 }
 
+*/
+
+void jiggle_species_vector( std::vector< species > & s, double focal_time) {
+
+      for(auto brother = s.begin(); brother != s.end(); ++brother) {
+        if((*brother).birth_time == focal_time ) {
+
+            // find sister species
+            auto sister = brother;
+            for( auto jt = brother; jt != s.end(); ++jt) {
+                if((*jt).birth_time == (*brother).birth_time) {
+                    if( (*jt).parent == (*brother).parent) {
+                        if( (*jt).ID != (*brother).ID) { //because we start at self, we will always have an immediate hit
+                            sister = jt;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            double dist_to_upper = 1e6;
+            double dist_to_lower = 1e6;
+
+            //find parent for upper limit
+            //they both have the same parent, so we only have to check against one child
+            for(auto p = s.begin(); p != s.end(); ++p) {
+                if( (*p).ID == (*brother).parent) {
+                    dist_to_upper = (*brother).birth_time - (*p).birth_time;
+                    break;
+                }
+            }
+
+            //find youngest offspring for lower limit
+            for(auto o = s.begin(); o != s.end(); ++o) {
+                if((*o).parent == (*brother).ID) {
+                    double diff = (*o).birth_time - (*brother).birth_time;
+                    if(diff < dist_to_lower) dist_to_lower = diff;
+                }
+                if((*o).parent == (*sister).ID) {
+                    double diff = (*o).birth_time - (*sister).birth_time;
+                    if(diff < dist_to_lower) dist_to_lower = diff;
+                }
+            }
+
+            //truncation should be shortest distance
+            double trunc = dist_to_lower;
+            if(dist_to_upper < dist_to_lower) trunc = dist_to_upper;
+
+            double new_birth_time = focal_time + trunc_normal(0.0, P.Jiggle, trunc);
+            (*brother).birth_time = new_birth_time;
+            (*sister).birth_time = new_birth_time;
+        }
+    }
+    return;
+}
 
 
 
-std::vector<double> doRun(const std::vector<spec_point>& real, int& L, int iter, int part_num, std::vector<double>& W, double& beta, double& mST,std::vector<spec_point>& Lins_for_NLTT, int waterModel)
+//new version
+void jiggle(std::vector< species > & s1, std::vector< species > & s2) {
+    //we have to identify all multiples
+
+    std::vector<double> b_times;
+    for(auto it = s1.begin(); it != s1.end(); ++it) { //collect all branching times across both sides of the tree
+        b_times.push_back((*it).birth_time);
+    }
+    for(auto it = s2.begin(); it != s2.end(); ++it) {
+        b_times.push_back((*it).birth_time);
+    }
+    std::sort(b_times.begin(), b_times.end()); //sort them (needed for remove_unique)
+
+    //now we need to find those branching times that occur > 2 times
+    std::vector<double> focal_times;
+    int counter = 0;
+    for(int i = 1; i < (int)b_times.size(); ++i) {
+        if(b_times[i] == b_times[i-1]) {
+            counter++;
+        } else {
+            if(counter > 2) {
+                focal_times.push_back(b_times[i-1]);
+            }
+            counter = 0;
+        }
+    }
+
+    if(focal_times.size() > 0) {
+        for(int i = 0; i < (int)focal_times.size(); ++i) {
+            double focal_time = focal_times[i];
+
+            if(focal_time > 0) {
+                jiggle_species_vector(s1, focal_time); //jiggle all species with that time
+                jiggle_species_vector(s2, focal_time);
+            }
+        }
+    }
+    return;
+}
+
+
+
+
+std::vector<double> doRun(const std::vector<spec_point>& real, int& L, int iter, int part_num,
+                          std::vector<double>& W, double& beta,
+                          double& mST,
+                          std::vector<spec_point>& Lins_for_NLTT,
+                          int waterModel)
 {
     std::vector<double> summaryStats = {1e6,1e6,1e6,1e6}; //default values very, very high
 	int idCount = 0;
@@ -472,11 +650,30 @@ std::vector<double> doRun(const std::vector<spec_point>& real, int& L, int iter,
 	P.numExtinct = numExtinctToReturn;
 	
 	if(branch2.empty() || branch1.empty()) { summaryStats[3] = L; return summaryStats;}
-	
-	
-	jiggle(s1);
-	jiggle(s2);
-	
+
+    //verify the jiggle.
+    bool verify = false;
+    if(verify) {
+        std::vector<species> nojig_s1 = s1;
+        std::vector<species> nojig_s2 = s2;
+        std::vector<spec_point> b1 = branch1;
+        std::vector<spec_point> b2 = branch2;
+        if(b1Extinct  == 0) b1 = calculateLineages_noextinct(nojig_s1);
+        else
+        {
+            branch1 = calculateLineages_withextinct(nojig_s1);
+        }
+
+        if(b2Extinct  == 0) b2 = calculateLineages_noextinct(nojig_s2);
+        else
+        {
+            branch2 = calculateLineages_withextinct(nojig_s2);
+        }
+        append_newick_file(nojig_s1,nojig_s2,b1,b2,iter);
+    }
+
+    jiggle(s1, s2);
+
 	if(b1Extinct  == 0) branch1 = calculateLineages_noextinct(s1);
 	else
 	{
@@ -488,7 +685,12 @@ std::vector<double> doRun(const std::vector<spec_point>& real, int& L, int iter,
 	{
 		branch2 = calculateLineages_withextinct(s2);
 	}
-	
+
+    if(verify) {
+        append_newick_file(s1,s2,branch1,branch2,iter+100);
+    }
+
+
 	
 	std::vector<spec_point> lineages = sumBranches(branch1,branch2);
 
@@ -507,7 +709,7 @@ std::vector<double> doRun(const std::vector<spec_point>& real, int& L, int iter,
 
 		if( (summaryStats[1] < 1e6 && summaryStats[2] < 1e6) || iter == 0)
 		{
-			if(iter > 10) {
+			if(iter > 13) {
                     if(withinLimits(summaryStats, iter, lineages, real, waterModel))
 					{
 						std::string iteration = boost::lexical_cast<std::string>(iter);
@@ -871,9 +1073,9 @@ void particle::calculateWeight(const std::vector< double >& M,
 
         double prodM = 0.0;
         for(int i = 0; i < 3; ++i) {
-            double factor = 0.05;
+            double factor = 0.25;
             if(i == T.model) {
-                factor = 0.9;
+                factor = 0.5;
             }
             prodM += factor * M[i];
         }
@@ -937,8 +1139,7 @@ void progressBar(double percent)
 	return;
 }
 
-void readParticles(int time, std::vector<particle>& particles)
-{
+void readParticles(int time, std::vector<particle>& particles) {
 	particles.clear();
 
 	std::string f_name = generateFileName(time);
@@ -946,8 +1147,7 @@ void readParticles(int time, std::vector<particle>& particles)
 	
 	std::cout << "attempting to read \t" << f_name << "\n";
 	
-	if(!read_part.is_open()) 
-	{
+	if(!read_part.is_open())   {
 		std::cout << "No input file of particles found!!!!\n";
 		return;
 	}
@@ -967,7 +1167,7 @@ void readParticles(int time, std::vector<particle>& particles)
 		}
 	}
 	std::cout << "Done reading particles\n";
-	while(particles.size() > P.numberParticles) {
+	while((int)particles.size() > P.numberParticles) {
 		particles.pop_back();
 	}
 	return;
@@ -1054,7 +1254,7 @@ point::point(int l, int t) //container to store LTT data, where lineage and time
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void setupVectors(std::vector<spec_point>& real_data, std::vector<double>& real)
+void setupVectors(std::vector<spec_point>& real_data)
 {
 	readRealDataPoint(real_data); //read the empirical data from a txt file
 	P.millionTime = get_min_time(); //this is the total time in millions of years of the empirical data
@@ -1806,9 +2006,13 @@ void write_newick_file(const std::vector<species>& s1, const std::vector<species
 	return;
 }
 
-void append_newick_file(const std::vector<species>& s1, const std::vector<species>& s2, const std::vector<spec_point>& b1, const std::vector<spec_point>& b2, int iter)
+void append_newick_file(const std::vector<species>& s1,
+                        const std::vector<species>& s2,
+                        const std::vector<spec_point>& b1,
+                        const std::vector<spec_point>& b2,
+                        int iter)
 {
-	double b_1,b_2;
+	double b_1, b_2;
 	if(b1.size() == 1)	b_1 = P.maxT - b1[0].time;
 	else b_1 = b1[1].time;
 

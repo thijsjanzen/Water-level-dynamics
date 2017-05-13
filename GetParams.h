@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include "Gillespie.h"
-#include "Beta.h"
+//#include "Beta.h"
 
 struct p;
 
